@@ -1,0 +1,41 @@
+Fine-tuning layout for scripts/train_finetune.py
+==============================================
+
+Option A — separate validation folder:
+
+  data/xray_finetune/
+    train/Tuberculosis/*.png
+    train/Pneumonia/*.jpg
+    train/COVID-19/*
+    train/No Findings/*
+    val/Tuberculosis/*
+    val/Pneumonia/*
+    ...
+
+Option B — only train/ (a stratified validation split is created automatically):
+
+  data/xray_finetune/train/<ClassFolder>/images...
+
+Folder names can be aliases, e.g. tb, normal, covid19 (see src/data/finetune_dataset.py).
+
+Run:
+
+  python scripts/train_finetune.py --data-dir data/xray_finetune
+
+Resume from a checkpoint:
+
+  python scripts/train_finetune.py --data-dir data/xray_finetune --resume models/saved/xraynet_plus.pth
+
+If ImageNet weights fail to download (SSL/offline), train from scratch then fine-tune longer, or fix certs and omit:
+
+  python scripts/train_finetune.py --data-dir data/xray_finetune --no-pretrained
+
+Checkpoint: models/saved/xraynet_plus.pth (overwritten when validation accuracy improves).
+
+Quick pipeline check (synthetic images):
+
+  python scripts/train_finetune.py --data-dir data/xray_finetune_smoke --epochs 1 --no-pretrained --output models/saved/smoke_test.pth
+
+Validation metrics (after you have train/val folders):
+
+  python scripts/evaluate_model.py --data-dir data/xray_finetune --split val

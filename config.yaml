@@ -1,17 +1,22 @@
 model:
-  name: "efficientnet-b3"
+  name: "efficientnet-b0"
   num_classes: 4
   pretrained: true
 
 training:
-  batch_size: 32
-  epochs: 50
+  batch_size: 16
+  epochs: 40
   learning_rate: 0.0001
   optimizer: "AdamW"
   weight_decay: 0.01
 
 data:
-  target_size: 512
+  target_size: 224
+  finetune_data_root: "data/xray_finetune"
+  nih_chest_xray_root: "data/nih_chest_xray"
+  kaggle_tb_chest_root: "data/kaggle_tb_chest"
+  kaggle_covid_chest_root: "data/kaggle_covid_chest"
+  mooney_chest_xray_root: "data/mooney_chest_xray"
   clahe_clip_limit: 2.0
   clahe_grid_size: 8
   train_split: 0.7

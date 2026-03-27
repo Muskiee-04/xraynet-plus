@@ -1,0 +1,46 @@
+NIH Chest X-ray14 for XRAYNET+ fine-tuning
+==========================================
+
+Dataset (Kaggle): https://www.kaggle.com/datasets/nih-chest-xrays/data
+
+1) Install Kaggle CLI and API token
+   - Create API token at https://www.kaggle.com/settings → "Create New API Token"
+   - Save as ~/.kaggle/kaggle.json  (chmod 600)
+
+   pip install kaggle
+
+2) Download and unzip under this project (example)
+
+   cd /path/to/xraynet-
+   mkdir -p data/nih_chest_xray
+   kaggle datasets download -d nih-chest-xrays/data -p data/nih_chest_xray
+   unzip data/nih_chest_xray/*.zip -d data/nih_chest_xray
+
+   Layout after unzip varies; the trainer searches for:
+   - Data_Entry_2017.csv
+   - images/   OR   images_224/   (PNG files)
+   - train_val_list*.txt
+   - test_list*.txt
+
+   If your zip nests another folder (e.g. archive/), either unzip there or pass:
+   --nih-root data/nih_chest_xray/archive
+
+3) Train (quick test with caps)
+
+   python scripts/train_nih_xraynet.py --nih-root data/nih_chest_xray --epochs 3 --max-per-class 1500 --class-weights
+
+4) Full training (long run; GPU recommended)
+
+   python scripts/train_nih_xraynet.py --nih-root data/nih_chest_xray --epochs 15 --batch-size 32 --class-weights
+
+5) Use the model in the app
+
+   cp models/saved/xraynet_nih_finetuned.pth models/saved/xraynet_plus.pth
+   # or
+   export XRAYNET_WEIGHTS=/absolute/path/to/xraynet_nih_finetuned.pth
+
+Read src/data/nih_xraynet_dataset.py for label mapping and clinical caveats (TB/COVID proxies).
+
+For NIH + real TB + real COVID Kaggle folders together, use the unified trainer:
+  ../UNIFIED_FINETUNE_SETUP.txt
+  python scripts/train_unified_finetune.py ...

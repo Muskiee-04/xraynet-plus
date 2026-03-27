@@ -1,12 +1,20 @@
 # app/database.py
+from __future__ import annotations
+
 import sqlite3
 import json
 import os
 from datetime import datetime
+import numpy as np
 import pandas as pd
 
 class DatabaseManager:
-    def __init__(self, db_path="xraynet_patient_data.db"):
+    def __init__(self, db_path: str | None = None):
+        if db_path is None:
+            os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)
+            db_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "data", "xraynet_plus.db")
+            )
         self.db_path = db_path
         self.setup_database()
     
@@ -339,6 +347,3 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error creating backup: {e}")
             return None
-
-# Import numpy for heatmap processing
-import numpy as np

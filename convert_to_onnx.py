@@ -5,7 +5,7 @@ import torch.nn as nn
 import os
 
 def convert_to_onnx():
-    """Convert trained PyTorch model to ONNX format"""
+    """Convert trained PyTorch model to ONNX (NIH ChestX-ray14 multi-label head = 15 classes)."""
     
     # Check if trained model exists
     if not os.path.exists('models/saved/best_model.pth'):
@@ -15,7 +15,7 @@ def convert_to_onnx():
     # Load the trained model
     checkpoint = torch.load('models/saved/best_model.pth', map_location='cpu')
     
-    # Create model architecture
+    # Create model architecture (NIH multi-label)
     model = models.efficientnet_b0(pretrained=False)
     model.classifier[1] = nn.Linear(model.classifier[1].in_features, 15)
     

@@ -1,0 +1,33 @@
+XRAYNET+ — Edge deployment and federated learning (reference)
+==============================================================
+
+Edge / low-resource inference
+-----------------------------
+1. Export ONNX:  python scripts/export_onnx_xraynet.py
+2. Optional INT8: python scripts/quantize_onnx_dynamic.py
+3. FastAPI:      POST /predict/onnx  (probabilities only; no Grad-CAM)
+4. Full UI/API with explainability: PyTorch POST /predict (default Streamlit path)
+
+Grad-CAM++ needs PyTorch hooks; ONNX path is intended for throughput-only kiosks or
+embedded CPUs where model size matters.
+
+Federated learning (not bundled)
+--------------------------------
+Production FL would use a framework (e.g. Flower, PySyft) to aggregate client-side
+gradient updates without centralizing raw DICOM/images. A typical pattern:
+
+- Each site runs fine-tuning locally on private data (scripts/train_finetune.py).
+- Only model deltas are sent to an aggregator server.
+- The aggregated weights are distributed as a new xraynet_plus.pth.
+
+This repo stays privacy-friendly by default (local SQLite, local inference). Adding FL
+requires a separate coordination service and compliance review; see NITI Aayog / IEEE
+references in your project PDF for motivation.
+
+Toy merge (classroom demo only)
+-------------------------------
+After each site trains locally, you can average two checkpoints:
+
+  python scripts/merge_model_weights.py site_a.pth site_b.pth --output merged.pth
+
+This is not secure multi-party aggregation; use a real FL framework for production.

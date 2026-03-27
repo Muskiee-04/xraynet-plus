@@ -143,13 +143,14 @@ class PDFReportGenerator:
         
         # Patient data table
         patient_info = [
-            ["Patient ID:", patient_data.get('patient_id', 'N/A')],
-            ["Name:", patient_data.get('name', 'N/A')],
-            ["Age:", patient_data.get('age', 'N/A')],
-            ["Gender:", patient_data.get('gender', 'N/A')],
-            ["Date of Birth:", patient_data.get('date_of_birth', 'N/A')],
-            ["Referring Physician:", patient_data.get('physician', 'N/A')],
-            ["Study Date:", patient_data.get('study_date', 'N/A')]
+            ["Patient ID:", str(patient_data.get("patient_id", "N/A"))],
+            ["Name:", str(patient_data.get("name", "N/A"))],
+            ["Age:", str(patient_data.get("age", "N/A"))],
+            ["Gender:", str(patient_data.get("gender", "N/A"))],
+            ["Clinical notes:", str(patient_data.get("clinical_notes", "N/A"))],
+            ["Date of Birth:", str(patient_data.get("date_of_birth", "N/A"))],
+            ["Referring Physician:", str(patient_data.get("physician", "N/A"))],
+            ["Study Date:", str(patient_data.get("study_date", "N/A"))],
         ]
         
         patient_table = Table(patient_info, colWidths=[2*inch, 3*inch])
@@ -273,7 +274,8 @@ class PDFReportGenerator:
         for result in analysis_results:
             pred = result.get('prediction', {})
             finding = pred.get('class_name', '').lower()
-            if finding and finding != 'normal' and finding not in findings:
+            benign = ('normal', 'no finding', 'healthy', 'no findings')
+            if finding and not any(b in finding for b in benign) and finding not in findings:
                 findings.append(finding)
         
         if not findings:
@@ -299,7 +301,8 @@ class PDFReportGenerator:
             pred = result.get('prediction', {})
             finding = pred.get('class_name', '').lower()
             
-            if finding and finding != 'normal':
+            benign = ('normal', 'no finding', 'healthy', 'no findings')
+            if finding and not any(b in finding for b in benign):
                 has_abnormalities = True
                 
                 if any(term in finding for term in ['pneumonia', 'infiltrate', 'consolidation']):

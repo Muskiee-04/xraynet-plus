@@ -1,0 +1,59 @@
+Unified fine-tuning (NIH + TB + COVID Kaggle datasets)
+======================================================
+
+Install Kaggle API (~/.kaggle/kaggle.json) then download into data/:
+
+1) NIH Chest X-ray14  
+   https://www.kaggle.com/datasets/nih-chest-xrays/data  
+
+   mkdir -p data/nih_chest_xray
+   kaggle datasets download -d nih-chest-xrays/data -p data/nih_chest_xray
+   unzip data/nih_chest_xray/*.zip -d data/nih_chest_xray
+
+2) Tuberculosis chest X-ray (Tawsifur Rahman et al.)  
+   https://www.kaggle.com/datasets/tawsifurrahman/tuberculosis-tb-chest-xray-dataset  
+
+   mkdir -p data/kaggle_tb_chest
+   kaggle datasets download -d tawsifurrahman/tuberculosis-tb-chest-xray-dataset -p data/kaggle_tb_chest
+   unzip data/kaggle_tb_chest/*.zip -d data/kaggle_tb_chest
+
+   Expected: subfolders such as Tuberculosis/ and Normal/ (names may vary slightly).
+
+3) COVID-19 chest X-ray (Alif Rahman)  
+   https://www.kaggle.com/datasets/alifrahman/covid19-chest-xray-image-dataset  
+
+   mkdir -p data/kaggle_covid_chest
+   kaggle datasets download -d alifrahman/covid19-chest-xray-image-dataset -p data/kaggle_covid_chest
+   unzip data/kaggle_covid_chest/*.zip -d data/kaggle_covid_chest
+
+   Expected: subfolders such as COVID/, Normal/, Pneumonia/ (names may vary).
+
+If class folders sit one level deeper (e.g. archive/Tuberculosis/), either:
+  pass the inner folder as --tb-root, or
+  use --dry-run to see detected subfolders and adjust paths.
+
+Commands
+--------
+
+Scan counts without training:
+
+  python scripts/train_unified_finetune.py \\
+    --nih-root data/nih_chest_xray \\
+    --tb-root data/kaggle_tb_chest \\
+    --covid-root data/kaggle_covid_chest \\
+    --dry-run
+
+Train (GPU recommended; reduce caps on CPU):
+
+  python scripts/train_unified_finetune.py \\
+    --nih-root data/nih_chest_xray \\
+    --tb-root data/kaggle_tb_chest \\
+    --covid-root data/kaggle_covid_chest \\
+    --epochs 15 --batch-size 24 --class-weights \\
+    --nih-max-per-class 6000 --cap-per-class 8000
+
+NIH: when --tb-root is set, NIH “Infiltration→TB” proxy is turned off automatically.
+NIH does not supply true COVID labels; the COVID Kaggle folder supplies class 2.
+
+Checkpoint: models/saved/xraynet_unified_finetuned.pth  
+(App loads it automatically if present, before xraynet_plus.pth.)

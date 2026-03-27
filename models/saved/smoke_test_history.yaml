@@ -1,0 +1,7 @@
+best_val_acc: 0.25
+history:
+- epoch: 1
+  train_acc: 0.25
+  train_loss: 1.4157874137163162
+  val_acc: 0.25
+  val_loss: 1.386806607246399
