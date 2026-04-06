@@ -11,6 +11,8 @@ Env:
   XRAYNET_WEIGHTS      — optional explicit .pth for PyTorch
   XRAYNET_ONNX_PATH    — optional path to .onnx (default models/saved/xraynet_plus.onnx)
   XRAYNET_ORT_PROVIDERS — cpu | cuda
+  GEMINI_API_KEY       — optional; enables /gemini/* routes
+  GEMINI_MODEL         — optional; default gemini-2.0-flash
 """
 from __future__ import annotations
 
@@ -34,7 +36,7 @@ from src.data.preprocessing import CXRPreprocessor
 from src.inference.onnx_cxr import OnnxCXRInference
 from src.inference.torch_inference import TorchCXRInference
 
-app = FastAPI(title="XRAYNET+", version="1.1.0")
+app = FastAPI(title="ChestRay Gemini API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -108,7 +110,7 @@ def _decode_image_bytes(raw: bytes, filename: str) -> np.ndarray:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "xraynet+"}
+    return {"status": "ok", "service": "chestray-gemini"}
 
 
 @app.post("/predict", response_model=PredictResponse)
@@ -177,3 +179,68 @@ async def predict_onnx(file: UploadFile = File(...)) -> Any:
         prevention=list(out.get("prevention") or []),
         backend="onnx",
     )
+
+
+# --- Optional Google Gemini (set GEMINI_API_KEY) ---
+
+try:
+    from src.ai.gemini_service import (
+        chat_reply_with_history,
+        generate_case_interpretation,
+        is_configured as gemini_configured,
+    )
+
+    _GEMINI_ROUTES = True
+except ImportError:
+    _GEMINI_ROUTES = False
+
+
+class GeminiInterpretRequest(BaseModel):
+    patient_data: dict[str, Any] = Field(default_factory=dict)
+    results: list[dict[str, Any]]
+
+
+class GeminiChatTurn(BaseModel):
+    role: str
+    parts: str
+
+
+class GeminiChatRequest(BaseModel):
+    message: str
+    patient_data: dict[str, Any] = Field(default_factory=dict)
+    results: list[dict[str, Any]]
+    history: list[GeminiChatTurn] = Field(default_factory=list)
+
+
+@app.get("/gemini/status")
+def gemini_status():
+    if not _GEMINI_ROUTES:
+        return {"available": False, "configured": False, "reason": "google-generativeai not installed"}
+    return {"available": True, "configured": gemini_configured()}
+
+
+@app.post("/gemini/interpret")
+async def gemini_interpret(body: GeminiInterpretRequest) -> dict[str, str]:
+    if not _GEMINI_ROUTES:
+        raise HTTPException(status_code=503, detail="Gemini SDK not installed.")
+    if not gemini_configured():
+        raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY on the server.")
+    try:
+        text = generate_case_interpretation(body.patient_data, body.results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"markdown": text}
+
+
+@app.post("/gemini/chat")
+async def gemini_chat(body: GeminiChatRequest) -> dict[str, str]:
+    if not _GEMINI_ROUTES:
+        raise HTTPException(status_code=503, detail="Gemini SDK not installed.")
+    if not gemini_configured():
+        raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY on the server.")
+    hist = [{"role": t.role, "parts": t.parts} for t in body.history]
+    try:
+        reply = chat_reply_with_history(body.message, body.patient_data, body.results, hist)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"reply": reply}

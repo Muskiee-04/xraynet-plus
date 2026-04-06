@@ -24,10 +24,25 @@ except ImportError as e:
     st.error(f"Import error: {e}")
     IMPORT_SUCCESS = False
 
+try:
+    from src.ai.gemini_service import (
+        chat_reply_with_history,
+        configure_from_key,
+        generate_case_interpretation,
+        generate_heatmap_explanation_plain_language,
+        generate_radiology_question_suggestions,
+        is_configured,
+        multimodal_compare_image,
+    )
+
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 # Page configuration with robot theme
 st.set_page_config(
-    page_title="🤖 I'm XRAYNET+ Your Friendly Medical Assistant",
-    page_icon="🤖",
+    page_title="ChestRay Gemini — CXR screening + Gemini copilot",
+    page_icon="✨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -321,7 +336,34 @@ class XrayNetPlusApp:
             st.session_state.reports_generated = False
         if 'show_admin' not in st.session_state:
             st.session_state.show_admin = False
-            
+        if 'gemini_chat_history' not in st.session_state:
+            st.session_state.gemini_chat_history = []
+        if 'gemini_narrative' not in st.session_state:
+            st.session_state.gemini_narrative = ""
+        if 'gemini_model_name' not in st.session_state:
+            st.session_state.gemini_model_name = ""
+
+    def _sidebar_gemini_settings(self):
+        """Optional Google AI Studio API key (free tier) for Gemini features."""
+        if not GEMINI_AVAILABLE:
+            return
+        with st.sidebar.expander("✨ Google Gemini (optional)", expanded=False):
+            st.caption("Get a key at [Google AI Studio](https://aistudio.google.com/apikey). Stored only in this browser session unless you use env/secrets.")
+            key = st.text_input("GEMINI_API_KEY", type="password", key="gemini_api_key_sidebar")
+            if key and key.strip():
+                try:
+                    configure_from_key(key.strip())
+                    st.caption("API key active for this browser session.")
+                except Exception as ex:
+                    st.error(str(ex))
+            env_ok = is_configured()
+            if env_ok and not (key and key.strip()):
+                st.info("Using GEMINI_API_KEY from environment or Streamlit secrets.")
+            import os
+
+            st.session_state.gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+            st.caption(f"Model: `{st.session_state.gemini_model_name}` — override with env `GEMINI_MODEL`.")
+
     def sidebar_upload(self):
         """Friendly sidebar for file upload"""
         with st.sidebar:
@@ -366,6 +408,10 @@ class XrayNetPlusApp:
                 accept_multiple_files=True,
             )
             
+            st.markdown("---")
+
+            self._sidebar_gemini_settings()
+
             st.markdown("---")
             
             # Friendly info
@@ -545,12 +591,139 @@ class XrayNetPlusApp:
             "Educational information only—not a medical diagnosis. "
             "Always follow advice from your qualified healthcare professional."
         )
+
+    def display_gemini_copilot(self, patient_data, results):
+        """Google Gemini: interpretation, Q&A, optional vision (user consent)."""
+        st.markdown("---")
+        st.markdown("## ✨ Gemini clinical copilot (educational)")
+        st.caption(
+            "Uses Google’s API when a key is set. Outputs are not diagnoses; do not upload identifiable PHI without authorization."
+        )
+
+        if not GEMINI_AVAILABLE:
+            st.warning("Install `google-generativeai` (see requirements.txt) to enable Gemini features.")
+            return
+
+        if not is_configured():
+            st.info("Add **GEMINI_API_KEY** in the sidebar expander, environment, or `.streamlit/secrets.toml`.")
+            return
+
+        tab_a, tab_b, tab_c, tab_d, tab_e = st.tabs(
+            ["Case narrative", "Ask a radiologist", "Heatmap explainer", "Chat", "Vision (consent)"]
+        )
+
+        with tab_a:
+            if st.button("Generate structured case narrative", key="gemini_narr_btn"):
+                with st.spinner("Calling Gemini…"):
+                    try:
+                        text = generate_case_interpretation(patient_data, results)
+                        st.session_state.gemini_narrative = text
+                        st.success("Saved for optional PDF appendix.")
+                    except Exception as ex:
+                        st.error(str(ex))
+                        text = ""
+                if st.session_state.get("gemini_narrative"):
+                    st.markdown(st.session_state.gemini_narrative)
+            elif st.session_state.get("gemini_narrative"):
+                st.markdown(st.session_state.gemini_narrative)
+
+        with tab_b:
+            if st.button("Suggest questions for your clinician", key="gemini_q_btn"):
+                with st.spinner("Calling Gemini…"):
+                    try:
+                        st.session_state.gemini_questions = generate_radiology_question_suggestions(
+                            patient_data, results
+                        )
+                    except Exception as ex:
+                        st.error(str(ex))
+            if st.session_state.get("gemini_questions"):
+                st.markdown(st.session_state.gemini_questions)
+
+        with tab_c:
+            names = [r.get("filename", f"image_{i}") for i, r in enumerate(results)]
+            pick = st.selectbox("Image for explainer", range(len(names)), format_func=lambda i: names[i])
+            if st.button("Explain heatmaps in plain language", key="gemini_hm_btn"):
+                with st.spinner("Calling Gemini…"):
+                    try:
+                        st.session_state.gemini_heatmap_expl = generate_heatmap_explanation_plain_language(
+                            patient_data, results[pick]
+                        )
+                    except Exception as ex:
+                        st.error(str(ex))
+            if st.session_state.get("gemini_heatmap_expl"):
+                st.markdown(st.session_state.gemini_heatmap_expl)
+
+        with tab_d:
+            if st.button("Clear chat history", key="gemini_chat_clear"):
+                st.session_state.gemini_chat_history = []
+            for turn in st.session_state.gemini_chat_history:
+                role = turn.get("role", "")
+                if role == "user":
+                    st.chat_message("user").write(turn.get("parts", ""))
+                else:
+                    st.chat_message("assistant").write(turn.get("parts", ""))
+            msg = st.chat_input("Ask about this case (educational only)…", key="gemini_chat_input")
+            if msg:
+                st.session_state.gemini_chat_history.append({"role": "user", "parts": msg})
+                with st.spinner("Gemini…"):
+                    try:
+                        reply = chat_reply_with_history(
+                            msg,
+                            patient_data,
+                            results,
+                            st.session_state.gemini_chat_history[:-1],
+                        )
+                    except Exception as ex:
+                        reply = f"Error: {ex}"
+                st.session_state.gemini_chat_history.append({"role": "model", "parts": reply})
+                st.rerun()
+
+        with tab_e:
+            st.warning(
+                "Sending images to Google leaves your network. Do not use for identifiable patient data without compliance review."
+            )
+            names = [r.get("filename", f"image_{i}") for i, r in enumerate(results)]
+            idx = st.selectbox("Image to send", range(len(names)), format_func=lambda i: names[i], key="gemini_vis_idx")
+            consent = st.checkbox("I understand and consent to sending this image to the Gemini API.", key="gemini_vis_ok")
+            extra = st.text_area("Optional focus for the model", value="Educational read consistent with class probabilities.")
+            if consent and st.button("Run vision-assisted commentary", key="gemini_vis_btn"):
+                img = results[idx]["original_image"]
+                if len(img.shape) == 2:
+                    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                elif img.shape[2] == 4:
+                    img = img[:, :, :3]
+                if img.dtype != np.uint8:
+                    img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
+                ok, enc = cv2.imencode(".png", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                if not ok:
+                    st.error("Could not encode image.")
+                else:
+                    with st.spinner("Gemini vision…"):
+                        try:
+                            st.session_state.gemini_vision = multimodal_compare_image(
+                                enc.tobytes(),
+                                "image/png",
+                                patient_data,
+                                results,
+                                user_prompt=extra or "Educational commentary.",
+                            )
+                        except Exception as ex:
+                            st.session_state.gemini_vision = f"Error: {ex}"
+            if st.session_state.get("gemini_vision"):
+                st.markdown(st.session_state.gemini_vision)
     
     def generate_report_section(self, patient_data, results):
         """Report generation section"""
         st.markdown("---")
         st.markdown("### 📄 Generate Medical Report")
-        
+        include_gemini = False
+        if GEMINI_AVAILABLE and st.session_state.get("gemini_narrative"):
+            include_gemini = st.checkbox(
+                "Append Gemini case narrative to PDF (if generated above)",
+                value=False,
+                key="pdf_include_gemini",
+            )
+
         if st.button("🖨️ Create Comprehensive Report", type="primary", use_container_width=True):
             with st.spinner("🔄 Generating your report..."):
                 try:
@@ -560,8 +733,14 @@ class XrayNetPlusApp:
                     if examination_id:
                         st.success(f"✅ Examination data stored (ID: {examination_id})")
                     
-                    # Generate PDF report
-                    pdf_buffer = self.report_generator.generate_report(patient_data, results)
+                    appendix = (
+                        st.session_state.get("gemini_narrative")
+                        if include_gemini and st.session_state.get("gemini_narrative")
+                        else None
+                    )
+                    pdf_buffer = self.report_generator.generate_report(
+                        patient_data, results, gemini_appendix=appendix
+                    )
                     
                     st.success("✅ Report Generated Successfully!")
                     st.download_button(
@@ -643,10 +822,9 @@ class XrayNetPlusApp:
         st.markdown("""
         <div class='robot-container'>
             <div class='robot-svg'>🤖</div>
-            <h1 style='color: #667eea; margin: 1rem 0;'>Hello! I'm Xraynet+</h1>
+            <h1 style='color: #667eea; margin: 1rem 0;'>Hello! I'm ChestRay Gemini</h1>
             <div class='speech-bubble'>
-                <p style='margin: 0;'><strong>Hi there!</strong> 👋 I'm here to help analyze chest X-rays using advanced AI technology. 
-                Upload your images and I'll provide detailed analysis with visual explanations!</p>
+                <p style='margin: 0;'><strong>Hi there!</strong> 👋 Local EfficientNet screening plus optional Google Gemini narratives, chat, and (with consent) vision—upload a chest X-ray to begin.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -696,8 +874,8 @@ class XrayNetPlusApp:
             st.markdown("""
             <div class='result-card' style='text-align: center;'>
                 <div style='font-size: 4rem;'>📊</div>
-                <h3 style='color: #667eea;'>Detailed Reports</h3>
-                <p>Comprehensive PDF reports for records</p>
+                <h3 style='color: #667eea;'>Gemini copilot</h3>
+                <p>Optional AI narratives, chat, and teaching prompts</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -734,6 +912,14 @@ class XrayNetPlusApp:
     def run(self):
         """Main application runner"""
         self.init_session_state()
+
+        if GEMINI_AVAILABLE and not is_configured():
+            try:
+                sec = getattr(st, "secrets", None)
+                if sec and sec.get("GEMINI_API_KEY"):
+                    configure_from_key(str(sec["GEMINI_API_KEY"]))
+            except (FileNotFoundError, KeyError, AttributeError, RuntimeError):
+                pass
         
         # Show admin dashboard if toggled
         if st.session_state.show_admin:
@@ -766,6 +952,7 @@ class XrayNetPlusApp:
                 st.markdown("---")
                 st.markdown("## 📊 Analysis Results")
                 self.display_results(results)
+                self.display_gemini_copilot(patient_data, results)
                 self.generate_report_section(patient_data, results)
             else:
                 st.error("❌ No images were successfully processed. Please check your files and try again.")
