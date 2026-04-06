@@ -67,6 +67,8 @@ class PredictResponse(BaseModel):
     confidence: float
     probabilities: dict[str, float]
     recommendation: str
+    clinical_steps: list[str] = Field(default_factory=list)
+    prevention: list[str] = Field(default_factory=list)
     heatmap_png_base64: str
     backend: str = "pytorch"
 
@@ -76,6 +78,8 @@ class PredictOnnxResponse(BaseModel):
     confidence: float
     probabilities: dict[str, float]
     recommendation: str
+    clinical_steps: list[str] = Field(default_factory=list)
+    prevention: list[str] = Field(default_factory=list)
     backend: str = "onnx"
     explainability_note: str = Field(
         default="Grad-CAM++ is only available via POST /predict (PyTorch).",
@@ -135,6 +139,8 @@ async def predict(file: UploadFile = File(...)) -> Any:
         confidence=float(out["confidence"]),
         probabilities={k: float(v) for k, v in out["probabilities"].items()},
         recommendation=str(out.get("recommendation", "")),
+        clinical_steps=list(out.get("clinical_steps") or []),
+        prevention=list(out.get("prevention") or []),
         heatmap_png_base64=b64,
         backend="pytorch",
     )
@@ -167,5 +173,7 @@ async def predict_onnx(file: UploadFile = File(...)) -> Any:
         confidence=float(out["confidence"]),
         probabilities={k: float(v) for k, v in out["probabilities"].items()},
         recommendation=str(out.get("recommendation", "")),
+        clinical_steps=list(out.get("clinical_steps") or []),
+        prevention=list(out.get("prevention") or []),
         backend="onnx",
     )

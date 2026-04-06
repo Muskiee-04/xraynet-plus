@@ -1,7 +1,14 @@
 # report_generator.py
 import io
 import os
+import sys
 from datetime import datetime
+
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from src.utils.cxr_recommendations import get_recommendation_detail
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -230,11 +237,10 @@ class PDFReportGenerator:
         
         elements.append(Spacer(1, 12))
         
-        # Recommendations
-        recommendations = self._generate_recommendations(analysis_results)
-        elements.append(Paragraph("Recommendations:", self.custom_styles['Bold']))
-        for rec in recommendations:
-            elements.append(Paragraph(f"• {rec}", self.custom_styles['Normal_Custom']))
+        elements.append(Paragraph("Recommendations (educational):", self.custom_styles['Bold']))
+        elements.append(Spacer(1, 6))
+        for block in self._recommendation_paragraphs(analysis_results):
+            elements.append(block)
         
         elements.append(Spacer(1, 20))
         
@@ -286,46 +292,40 @@ class PDFReportGenerator:
         else:
             return f"Analysis revealed multiple findings including {', '.join(findings[:-1])} and {findings[-1]}."
 
-    def _generate_recommendations(self, analysis_results):
-        """Generate recommendations based on findings"""
-        recommendations = []
-        
+    def _recommendation_paragraphs(self, analysis_results):
+        """Build ReportLab flowables for class-specific clinical and prevention guidance."""
+        out: list = []
         if not analysis_results:
-            recommendations.append("No specific recommendations based on current analysis.")
-            return recommendations
-        
-        # Check for specific findings and add relevant recommendations
-        has_abnormalities = False
-        
+            out.append(Paragraph("No specific recommendations based on current analysis.", self.custom_styles['Normal_Custom']))
+            return out
+
+        seen: set[str] = set()
         for result in analysis_results:
-            pred = result.get('prediction', {})
-            finding = pred.get('class_name', '').lower()
-            
-            benign = ('normal', 'no finding', 'healthy', 'no findings')
-            if finding and not any(b in finding for b in benign):
-                has_abnormalities = True
-                
-                if any(term in finding for term in ['pneumonia', 'infiltrate', 'consolidation']):
-                    recommendations.append("Clinical correlation and possible antibiotic therapy recommended.")
-                    recommendations.append("Follow-up chest X-ray in 4-6 weeks if symptoms persist.")
-                
-                if 'fracture' in finding:
-                    recommendations.append("Orthopedic consultation recommended.")
-                    recommendations.append("Appropriate immobilization and pain management advised.")
-                
-                if any(term in finding for term in ['nodule', 'mass', 'tumor']):
-                    recommendations.append("Further evaluation with CT scan recommended.")
-                    recommendations.append("Comparison with previous imaging studies if available.")
-        
-        if not has_abnormalities:
-            recommendations.append("Routine follow-up as per standard clinical practice.")
-        
-        # Add general recommendations
-        recommendations.append("Correlation with clinical symptoms and laboratory findings advised.")
-        recommendations.append("Discuss results with referring physician for appropriate management.")
-        
-        # Remove duplicates while preserving order
-        return list(dict.fromkeys(recommendations))
+            pred = result.get("prediction", {})
+            name = (pred.get("class_name") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+
+            detail = get_recommendation_detail(name)
+            out.append(Paragraph(f"<b>{name}</b>", self.custom_styles['Bold']))
+            out.append(Paragraph(detail["summary"], self.custom_styles['Normal_Custom']))
+            out.append(Spacer(1, 6))
+            out.append(Paragraph("<b>Clinical next steps</b>", self.custom_styles['Bold']))
+            for line in detail["clinical_steps"]:
+                out.append(Paragraph(f"• {line}", self.custom_styles['Normal_Custom']))
+            out.append(Spacer(1, 6))
+            out.append(Paragraph("<b>Prevention &amp; wellness</b>", self.custom_styles['Bold']))
+            for line in detail["prevention"]:
+                out.append(Paragraph(f"• {line}", self.custom_styles['Normal_Custom']))
+            out.append(Spacer(1, 12))
+
+        out.append(Paragraph(
+            "<i>Correlation with examination and laboratory testing is essential. "
+            "This text is educational and not a substitute for a licensed clinician.</i>",
+            self.custom_styles['Normal_Custom'],
+        ))
+        return out
 
     def generate_simple_report(self, patient_data, results):
         """
@@ -352,12 +352,19 @@ FINDINGS:
         
         for i, result in enumerate(results, 1):
             pred = result.get('prediction', {})
+            detail = get_recommendation_detail(pred.get('class_name', ''))
+            clin = "\n".join(f"  - {s}" for s in detail["clinical_steps"])
+            prev = "\n".join(f"  - {s}" for s in detail["prevention"])
             report_content += f"""
 Image {i}: {result.get('filename', 'Unknown')}
 - Primary Finding: {pred.get('class_name', 'Unknown')}
 - Confidence: {pred.get('confidence', 0)*100:.1f}%
 - Description: {pred.get('description', 'N/A')}
-- Recommendation: {pred.get('recommendation', 'N/A')}
+- Summary: {pred.get('recommendation', 'N/A')}
+- Clinical next steps:
+{clin}
+- Prevention & wellness:
+{prev}
 """
         
         # Convert to bytes

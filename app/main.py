@@ -525,8 +525,26 @@ class XrayNetPlusApp:
                 with col3:
                     st.write(f"**{prob_value:.0%}**")
         
-        # Recommendation
-        st.info(f"💡 **Recommendation:** {pred['recommendation']}")
+        # Recommendations (class-specific guidance + prevention)
+        st.info(f"💡 **Summary:** {pred['recommendation']}")
+        clin = pred.get("clinical_steps")
+        prev = pred.get("prevention")
+        if not clin or not prev:
+            from src.utils.cxr_recommendations import get_recommendation_detail
+
+            d = get_recommendation_detail(pred["class_name"])
+            clin = clin or d["clinical_steps"]
+            prev = prev or d["prevention"]
+        with st.expander("📋 Clinical next steps & follow-up", expanded=True):
+            for line in clin:
+                st.markdown(f"- {line}")
+        with st.expander("🛡️ Prevention & healthy habits", expanded=False):
+            for line in prev:
+                st.markdown(f"- {line}")
+        st.caption(
+            "Educational information only—not a medical diagnosis. "
+            "Always follow advice from your qualified healthcare professional."
+        )
     
     def generate_report_section(self, patient_data, results):
         """Report generation section"""

@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from src.models.cxr_classifier import CLASS_NAMES
+from src.utils.cxr_recommendations import get_recommendation_detail, get_recommendation_line
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -18,17 +19,6 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     x = x - x.max()
     e = np.exp(x)
     return (e / e.sum()).astype(np.float32)
-
-
-def _recommendation_for_class(name: str) -> str:
-    n = name.lower()
-    if "tuberculosis" in n:
-        return "Suggest clinical correlation, infection workup, and specialist referral per local TB protocol."
-    if "pneumonia" in n:
-        return "Consider clinical correlation, vitals, and appropriate antimicrobial therapy per guidelines."
-    if "covid" in n:
-        return "Consider viral testing and isolation per institutional policy; correlate with symptoms."
-    return "No acute finding suggested by the model; routine care if clinically appropriate."
 
 
 class OnnxCXRInference:
@@ -70,11 +60,14 @@ class OnnxCXRInference:
         probs = _softmax(logits)
         idx = int(np.argmax(probs))
         name = self.class_names[idx]
+        rec = get_recommendation_detail(name)
         return {
             "class_name": name,
             "class_index": idx,
             "confidence": float(probs[idx]),
             "probabilities": {self.class_names[i]: float(probs[i]) for i in range(len(self.class_names))},
-            "recommendation": _recommendation_for_class(name),
+            "recommendation": get_recommendation_line(name),
+            "clinical_steps": list(rec["clinical_steps"]),
+            "prevention": list(rec["prevention"]),
             "description": f"Model assigns highest probability to {name} (ONNX backend).",
         }

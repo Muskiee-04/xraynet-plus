@@ -9,18 +9,8 @@ import torch.nn.functional as F
 
 from src.explainability.gradcam import GradCAMPlusPlusTorch
 from src.models.cxr_classifier import CLASS_NAMES, build_efficientnet_cxr
+from src.utils.cxr_recommendations import get_recommendation_detail, get_recommendation_line
 from src.utils.helpers import create_gradcam_visualization
-
-
-def _recommendation_for_class(name: str) -> str:
-    n = name.lower()
-    if "tuberculosis" in n:
-        return "Suggest clinical correlation, infection workup, and specialist referral per local TB protocol."
-    if "pneumonia" in n:
-        return "Consider clinical correlation, vitals, and appropriate antimicrobial therapy per guidelines."
-    if "covid" in n:
-        return "Consider viral testing and isolation per institutional policy; correlate with symptoms."
-    return "No acute finding suggested by the model; routine care if clinically appropriate."
 
 
 class TorchCXRInference:
@@ -118,12 +108,18 @@ class TorchCXRInference:
         cam = cam_h.compute_heatmap()
         heatmap_rgb = create_gradcam_visualization(cam, original_rgb)
 
+        rec = get_recommendation_detail(class_name)
+        clinical = list(rec["clinical_steps"])
+        prevention = list(rec["prevention"])
+
         return {
             "class_name": class_name,
             "class_index": class_idx,
             "confidence": confidence,
             "probabilities": prob_map,
-            "recommendation": _recommendation_for_class(class_name),
+            "recommendation": get_recommendation_line(class_name),
+            "clinical_steps": clinical,
+            "prevention": prevention,
             "description": f"Model assigns highest probability to {class_name}.",
             "heatmap_rgb": heatmap_rgb,
         }
