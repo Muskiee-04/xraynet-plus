@@ -10,6 +10,11 @@ build/
 venv/
 .env
 
+# Local app data / generated artifacts (do not commit)
+data/xraynet_plus.db
+data/xraynet_plus.db-journal
+heatmaps/
+
 # Local / downloaded datasets (keep small docs only)
 data/mooney_chest_xray/
 data/alif_covid_kaggle/
