@@ -1,29 +1,39 @@
-# ChestRay Gemini
+# ChestRay Gemini (xraynet-plus)
 
-Explainable chest X-ray screening (TB, pneumonia, COVID-19, no findings) with **local EfficientNet + Grad-CAM++**, plus an optional **Google Gemini** copilot for educational narratives, chat, clinician-style question prompts, and (with explicit consent) vision-assisted commentary.
+**xraynet-plus** is built around a **dual core**: (1) **on-device chest X-ray AI** — EfficientNet-B0 + Grad-CAM++ for TB / pneumonia / COVID-19 / no-findings screening signals — and (2) the **Google Gemini API** as the **primary interpretive layer**: structured case narratives, clinician-style question prompts, heatmap education, multi-turn chat, optional vision-assisted commentary, and PDF narrative appendices.
 
-This line of work is a **separate product** from the original [xraynet-](https://github.com/Muskiee-04/xraynet-) repository: same core model stack, but Gemini integration, rebranded UI/PDFs, and extra API routes.
+The CNN produces **numbers and heatmaps**; Gemini turns that into **context-aware, uncertainty-aware language** for teaching and decision-support demos. For the intended experience, **configure a Gemini API key** (free tier on [Google AI Studio](https://aistudio.google.com/apikey)). Local inference still runs without it; Gemini features require the key.
+
+This repo is a **separate product** from [xraynet-](https://github.com/Muskiee-04/xraynet-): same training/inference backbone, with Gemini-first UX, API routes, and reporting.
+
+## Architecture (why Gemini matters here)
+
+| Layer | Role |
+|--------|------|
+| **PyTorch + Grad-CAM++** | Fast, private, deterministic class probabilities and saliency maps. |
+| **Google Gemini** | Natural-language synthesis, chat, teaching prompts, optional multimodal image+text — aligned to model outputs and patient context. |
+| **SQLite + ReportLab** | Persistence and PDFs; optional embedding of Gemini-generated narrative. |
 
 ## Features
 
-- **Streamlit** — Upload PNG/JPEG/WebP/TIFF/BMP or DICOM; heatmaps; PDF reports; SQLite admin; Gemini tabs (narrative, questions, heatmap explainer, chat, optional vision).
-- **FastAPI** — `POST /predict`, `POST /predict/onnx`, plus `GET /gemini/status`, `POST /gemini/interpret`, `POST /gemini/chat` when `GEMINI_API_KEY` is set on the server.
-- **Training / ONNX** — Same scripts as the upstream project (`scripts/train_finetune.py`, export/quantize, Docker).
+- **Streamlit** — DICOM/images → CNN results → **Gemini copilot immediately after the case summary** → per-image heatmaps; PDF with optional Gemini appendix; SQLite admin.
+- **FastAPI** — `POST /predict`, `POST /predict/onnx`, plus **`GET /gemini/status`**, **`POST /gemini/interpret`**, **`POST /gemini/chat`** (first-class when `GEMINI_API_KEY` is set).
+- **Training / ONNX** — `scripts/train_finetune.py`, export/quantize, Docker (same lineage as xraynet-).
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
 python scripts/init_demo_model.py   # optional: starter .pth
-export GEMINI_API_KEY="your-key"    # optional; or use sidebar / Streamlit secrets
+export GEMINI_API_KEY="your-key"    # recommended for full xraynet-plus experience
 streamlit run app/main.py
 ```
 
-**Gemini API key (free tier):** create one at [Google AI Studio](https://aistudio.google.com/apikey).
+**Gemini API key (free tier):** [Google AI Studio → API keys](https://aistudio.google.com/apikey).
 
 - **Environment:** `export GEMINI_API_KEY=...`
 - **Streamlit secrets:** `.streamlit/secrets.toml` with `GEMINI_API_KEY = "..."`
-- **UI:** Sidebar → “Google Gemini (optional)” (session only; do not commit keys)
+- **UI:** Sidebar → **“Google Gemini API”** (session key entry; do not commit keys)
 
 **Model name:** override with `GEMINI_MODEL` (default `gemini-2.0-flash`).
 

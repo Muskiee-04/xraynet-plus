@@ -344,11 +344,15 @@ class XrayNetPlusApp:
             st.session_state.gemini_model_name = ""
 
     def _sidebar_gemini_settings(self):
-        """Optional Google AI Studio API key (free tier) for Gemini features."""
+        """Google AI Studio API key — central to xraynet-plus interpretive features."""
         if not GEMINI_AVAILABLE:
+            st.sidebar.warning("Install `google-generativeai` for Gemini (`pip install google-generativeai`).")
             return
-        with st.sidebar.expander("✨ Google Gemini (optional)", expanded=False):
-            st.caption("Get a key at [Google AI Studio](https://aistudio.google.com/apikey). Stored only in this browser session unless you use env/secrets.")
+        with st.sidebar.expander("✨ Google Gemini API — core capability", expanded=True):
+            st.caption(
+                "**xraynet-plus** pairs local CNN scores with Gemini for narratives, chat, and teaching. "
+                "Key from [Google AI Studio](https://aistudio.google.com/apikey). Session-only unless you use env/secrets."
+            )
             key = st.text_input("GEMINI_API_KEY", type="password", key="gemini_api_key_sidebar")
             if key and key.strip():
                 try:
@@ -372,10 +376,14 @@ class XrayNetPlusApp:
             <div style='text-align: center; padding: 1rem 0;'>
                 <div style='font-size: 80px;'>🤖</div>
                 <h2 style='color: white; margin: 0;'>RoboRadiology</h2>
-                <p style='color: rgba(255,255,255,0.9); margin: 0.5rem 0;'>Your Friendly AI Assistant</p>
+                <p style='color: rgba(255,255,255,0.9); margin: 0.5rem 0;'>CNN + Google Gemini • xraynet-plus</p>
             </div>
             """, unsafe_allow_html=True)
             
+            st.markdown("---")
+
+            self._sidebar_gemini_settings()
+
             st.markdown("---")
             
             # Admin toggle
@@ -408,10 +416,6 @@ class XrayNetPlusApp:
                 accept_multiple_files=True,
             )
             
-            st.markdown("---")
-
-            self._sidebar_gemini_settings()
-
             st.markdown("---")
             
             # Friendly info
@@ -465,14 +469,13 @@ class XrayNetPlusApp:
             st.error(f"❌ Error processing {uploaded_file.name}: {str(e)}")
             return None
         
-    def display_results(self, results):
-        """Display results with icons and visual elements"""
+    def display_results_summary(self, results):
+        """Case-level metrics (shown before Gemini copilot)."""
         if not results:
             return
-            
-        # Summary metrics with icons
+
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             st.markdown(f"""
             <div class='metric-icon-card'>
@@ -481,9 +484,9 @@ class XrayNetPlusApp:
                 <div class='metric-label'>Images Analyzed</div>
             </div>
             """, unsafe_allow_html=True)
-        
+
         with col2:
-            avg_confidence = np.mean([r['prediction']['confidence'] for r in results])
+            avg_confidence = np.mean([r["prediction"]["confidence"] for r in results])
             st.markdown(f"""
             <div class='metric-icon-card'>
                 <div class='metric-icon'>🎯</div>
@@ -491,11 +494,21 @@ class XrayNetPlusApp:
                 <div class='metric-label'>Average Confidence</div>
             </div>
             """, unsafe_allow_html=True)
-        
+
         with col3:
-            primary_diagnosis = max(set([r['prediction']['class_name'] for r in results]), 
-                                  key=[r['prediction']['class_name'] for r in results].count)
-            diagnosis_icon = "🦠" if "Tuberculosis" in primary_diagnosis else "🫁" if "Pneumonia" in primary_diagnosis else "😷" if "COVID" in primary_diagnosis else "✅"
+            primary_diagnosis = max(
+                set([r["prediction"]["class_name"] for r in results]),
+                key=[r["prediction"]["class_name"] for r in results].count,
+            )
+            diagnosis_icon = (
+                "🦠"
+                if "Tuberculosis" in primary_diagnosis
+                else "🫁"
+                if "Pneumonia" in primary_diagnosis
+                else "😷"
+                if "COVID" in primary_diagnosis
+                else "✅"
+            )
             st.markdown(f"""
             <div class='metric-icon-card'>
                 <div class='metric-icon'>{diagnosis_icon}</div>
@@ -503,10 +516,13 @@ class XrayNetPlusApp:
                 <div class='metric-label'>Primary Finding</div>
             </div>
             """, unsafe_allow_html=True)
-        
+
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Display each result
+
+    def display_results_per_image(self, results):
+        """Grad-CAM and per-image details after Gemini copilot."""
+        if not results:
+            return
         for result in results:
             self.display_single_result(result)
     
@@ -593,19 +609,27 @@ class XrayNetPlusApp:
         )
 
     def display_gemini_copilot(self, patient_data, results):
-        """Google Gemini: interpretation, Q&A, optional vision (user consent)."""
+        """Google Gemini — primary interpretive layer for xraynet-plus (educational)."""
         st.markdown("---")
-        st.markdown("## ✨ Gemini clinical copilot (educational)")
+        st.markdown("## ✨ Google Gemini — case intelligence layer")
+        st.markdown(
+            "**This is the main differentiator of xraynet-plus:** Gemini turns CNN probabilities and your "
+            "clinical notes into narratives, chat, teaching prompts, and (optionally) vision-grounded commentary. "
+            "Not a diagnosis."
+        )
         st.caption(
-            "Uses Google’s API when a key is set. Outputs are not diagnoses; do not upload identifiable PHI without authorization."
+            "Requires `GEMINI_API_KEY`. Do not send identifiable PHI without authorization."
         )
 
         if not GEMINI_AVAILABLE:
-            st.warning("Install `google-generativeai` (see requirements.txt) to enable Gemini features.")
+            st.warning("Install `google-generativeai` (see requirements.txt) — Gemini is a core part of this project.")
             return
 
         if not is_configured():
-            st.info("Add **GEMINI_API_KEY** in the sidebar expander, environment, or `.streamlit/secrets.toml`.")
+            st.info(
+                "**Set up Gemini first:** sidebar **Google Gemini API — core capability**, or "
+                "`GEMINI_API_KEY` in the environment / `.streamlit/secrets.toml`."
+            )
             return
 
         tab_a, tab_b, tab_c, tab_d, tab_e = st.tabs(
@@ -719,8 +743,8 @@ class XrayNetPlusApp:
         include_gemini = False
         if GEMINI_AVAILABLE and st.session_state.get("gemini_narrative"):
             include_gemini = st.checkbox(
-                "Append Gemini case narrative to PDF (if generated above)",
-                value=False,
+                "Append Gemini case narrative to PDF (recommended for xraynet-plus reports)",
+                value=True,
                 key="pdf_include_gemini",
             )
 
@@ -824,7 +848,7 @@ class XrayNetPlusApp:
             <div class='robot-svg'>🤖</div>
             <h1 style='color: #667eea; margin: 1rem 0;'>Hello! I'm ChestRay Gemini</h1>
             <div class='speech-bubble'>
-                <p style='margin: 0;'><strong>Hi there!</strong> 👋 Local EfficientNet screening plus optional Google Gemini narratives, chat, and (with consent) vision—upload a chest X-ray to begin.</p>
+                <p style='margin: 0;'><strong>Hi there!</strong> 👋 This app is built around <strong>two engines</strong>: local EfficientNet + Grad-CAM++ for screening signals, and the <strong>Google Gemini API</strong> for case narratives, chat, teaching prompts, and (with consent) vision. Add your API key in the sidebar first for the full experience—then upload a chest X-ray.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -849,33 +873,33 @@ class XrayNetPlusApp:
         </div>
         """, unsafe_allow_html=True)
         
-        # Features
+        # Features — Gemini featured first as a pillar
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.markdown("""
-            <div class='result-card' style='text-align: center;'>
-                <div style='font-size: 4rem;'>🎯</div>
-                <h3 style='color: #667eea;'>Accurate Detection</h3>
-                <p>AI-powered analysis with confidence scoring</p>
+            <div class='result-card' style='text-align: center; border-color: #f5576c;'>
+                <div style='font-size: 4rem;'>✨</div>
+                <h3 style='color: #667eea;'>Gemini API layer</h3>
+                <p>Narratives, chat, clinician questions, heatmap teaching & optional vision</p>
             </div>
             """, unsafe_allow_html=True)
         
         with col2:
             st.markdown("""
             <div class='result-card' style='text-align: center;'>
-                <div style='font-size: 4rem;'>🔍</div>
-                <h3 style='color: #667eea;'>Visual Explanations</h3>
-                <p>See exactly where AI detects abnormalities</p>
+                <div style='font-size: 4rem;'>🎯</div>
+                <h3 style='color: #667eea;'>Local CNN screening</h3>
+                <p>EfficientNet probabilities + confidence</p>
             </div>
             """, unsafe_allow_html=True)
         
         with col3:
             st.markdown("""
             <div class='result-card' style='text-align: center;'>
-                <div style='font-size: 4rem;'>📊</div>
-                <h3 style='color: #667eea;'>Gemini copilot</h3>
-                <p>Optional AI narratives, chat, and teaching prompts</p>
+                <div style='font-size: 4rem;'>🔍</div>
+                <h3 style='color: #667eea;'>Grad-CAM++</h3>
+                <p>Where the model looks — explained further with Gemini</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -887,22 +911,28 @@ class XrayNetPlusApp:
         with col1:
             st.markdown("""
             <div style='background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);'>
-                <h4 style='color: #667eea;'>📝 Step 1: Enter Patient Info</h4>
-                <p>Fill in patient details in the sidebar</p>
+                <h4 style='color: #667eea;'>🔑 Step 1: Gemini API key</h4>
+                <p>Open <strong>Google Gemini API</strong> in the sidebar and paste your key (or set env / secrets)</p>
                 
-                <h4 style='color: #667eea; margin-top: 1.5rem;'>📸 Step 2: Upload Images</h4>
-                <p>Drag and drop chest X-ray images</p>
+                <h4 style='color: #667eea; margin-top: 1.5rem;'>📝 Step 2: Patient info</h4>
+                <p>Fill in details in the sidebar</p>
+                
+                <h4 style='color: #667eea; margin-top: 1.5rem;'>📸 Step 3: Upload X-rays</h4>
+                <p>Drag and drop images or DICOM</p>
             </div>
             """, unsafe_allow_html=True)
         
         with col2:
             st.markdown("""
             <div style='background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);'>
-                <h4 style='color: #667eea;'>🔬 Step 3: Review Analysis</h4>
-                <p>I'll analyze and show visual heatmaps</p>
+                <h4 style='color: #667eea;'>✨ Step 4: Gemini copilot</h4>
+                <p>Right after the case summary — narratives, chat, questions, optional vision</p>
                 
-                <h4 style='color: #667eea; margin-top: 1.5rem;'>📄 Step 4: Get Report</h4>
-                <p>Download comprehensive PDF report</p>
+                <h4 style='color: #667eea; margin-top: 1.5rem;'>🖼️ Step 5: Per-image heatmaps</h4>
+                <p>Drill into each study below the Gemini section</p>
+                
+                <h4 style='color: #667eea; margin-top: 1.5rem;'>📄 Step 6: PDF report</h4>
+                <p>Download report; optionally append Gemini narrative</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -951,8 +981,11 @@ class XrayNetPlusApp:
                 st.session_state.predictions = results
                 st.markdown("---")
                 st.markdown("## 📊 Analysis Results")
-                self.display_results(results)
+                self.display_results_summary(results)
                 self.display_gemini_copilot(patient_data, results)
+                st.markdown("### 🖼️ Per-image CNN output & Grad-CAM++")
+                st.caption("Detailed heatmaps and class probabilities for each upload — after the Gemini layer above.")
+                self.display_results_per_image(results)
                 self.generate_report_section(patient_data, results)
             else:
                 st.error("❌ No images were successfully processed. Please check your files and try again.")

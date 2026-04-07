@@ -1,8 +1,9 @@
 """
-XRAYNET+ REST API
------------------
+ChestRay Gemini / xraynet-plus REST API
+---------------------------------------
 - POST /predict — PyTorch + Grad-CAM++ heatmap (PNG base64). Accepts PNG/JPEG/WebP and DICOM (.dcm).
 - POST /predict/onnx — ONNX Runtime, class probabilities only (edge / no Grad-CAM).
+- GET /gemini/status, POST /gemini/interpret, POST /gemini/chat — Google Gemini interpretive layer (requires GEMINI_API_KEY).
 
 Run from repo root:
   uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
